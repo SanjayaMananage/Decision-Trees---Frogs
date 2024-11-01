@@ -1,0 +1,320 @@
+---
+title: "Decission Trees - Frogs"
+output: pdf_document
+
+header-includes: 
+   - \usepackage{float}
+   - \floatplacement{figure}{H}
+   - \usepackage{caption}
+   - \captionsetup[figure]{font=scriptsize}
+   - \captionsetup[table]{font=scriptsize}
+geometry: "left=1cm,right=1cm,top=0.5cm,bottom=0.5cm"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+\flushleft
+
+
+I consider the Frogs data set in library “DAAG” in R set([https://cran.r-project.org/web/packages/DAAG/DAAG.pdf](https://cran.r-project.org/web/packages/DAAG/DAAG.pdf)). This dataset consists of 212 sites of the Snowy Mountain area of New South Wales, Australia. Each site was surveyed to understand the distribution of the Southern Corroboree frog. The variables are available as a dataset in R via the package “DAAG”. This data set is created for prediction of whether frogs were found or not. I take "pres.abs " as the binary response variable and consider all predictors as quantitative variables also take all the data as training data. 
+
+Additionally For all the models I use leave-one-out cross-validation (LOOCV) to compute the estimated test MSE.
+
+
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+library(DAAG)
+frogs.data<-frogs##Read training data set from package DAAG
+frogs.data$pres.abs<-as.factor(frogs.data$pres.abs)##Factor the variable pres.abs
+attach(frogs.data)## Attach the data set
+```
+
+## Fit a tree to the data 
+
+```{r,echo=FALSE}
+library(tree)
+
+frogs.tree <- tree(pres.abs ~ ., data=frogs.data)
+sumry<-summary(frogs.tree)
+sumry
+misclass.tree(frogs.tree)
+
+```
+The Variables actually used in tree construction are "distance",  "northing",  "NoOfPools", "easting",   "avrain", "meanmax", "altitude" and  "meanmin" . There are 22 nodes and residual mean deviance is 0.523 and Misclassification error rate is 0.1226
+
+
+```{r,echo=FALSE,fig.align="center",fig.cap="Regression tree for Admission data",  out.width = "100%"}
+# Plot the tree
+plot(frogs.tree)
+text(frogs.tree, pretty = 0, cex = 0.5)
+```
+
+Let $R_j$ be the partitions of the predictor space.
+
+$$
+\begin{aligned}
+R_1 &=\{X \mid Glucose < 127.5,Age < 28.5,BMI < 30.95 \} \\
+R_2 &=\{X \mid Glucose < 127.5,Age < 28.5,BMI \ge 30.95 \} \\
+R_3 &=\{X \mid Glucose < 127.5,Age \ge 28.5,BMI < 26.35  \} \\
+R_4 &=\{X \mid Glucose < 127.5,Age \ge 28.5,BMI \ge 26.35, Glucose < 99.5\} \\
+R_5 &=\{X \mid Glucose < 127.5,Age \ge 28.5,BMI \ge 26.35, Glucose \ge 99.5  ,DiabetesPedigreeFunction < 0.561\} \\
+R_6 &=\{X \mid Glucose < 127.5,Age \ge 28.5,BMI \ge 26.35, Glucose \ge 99.5  ,DiabetesPedigreeFunction \ge 0.561, Pregnancies < 6.5\} \\
+R_7 &=\{X \mid Glucose < 127.5,Age \ge 28.5,BMI \ge 26.35, Glucose \ge 99.5  ,DiabetesPedigreeFunction \ge 0.561, Pregnancies \ge 6.5 \} \\
+R_8 &=\{X \mid Glucose \ge 127.5,  BMI < 29.95,Glucose < 145.5\} \\
+R_9 &=\{X \mid Glucose \ge 127.5,  BMI < 29.95,Glucose \ge 145.5\} \\
+R_{10} &=\{X \mid Glucose \ge 127.5,  BMI \ge 29.95,Glucose < 157.5\} \\
+R_{11} &=\{X \mid Glucose \ge 127.5,  BMI \ge 29.95,Glucose \ge 157.5\} \\
+\end{aligned}
+$$
+
+```{r,echo=FALSE,warning=FALSE}
+LOOCV<-function(data){
+n<-length(data[,1])
+tree.pred.fit<-c()
+for (i in 1:n) {
+  #i=1
+  newdata<-data[-i,]
+  testdata<-data[i,]
+  fit <- tree(pres.abs ~ ., newdata)
+  summary(fit)
+  tree.pred.fit[i] <- predict(fit, testdata,"class")
+}
+#tree.pred.fit<-ifelse(tree.pred.fit>=.5,0,1)
+#print(tree.pred.fit)
+  MSE<- mean((tree.pred.fit !=data$pres.abs))
+  return(list(MSE=MSE,tree.pred.fit=tree.pred.fit))
+#return(tree.pred.fit)
+}
+
+test.MSE<-LOOCV(data=frogs.data)
+pred=test.MSE$tree.pred.fit-1
+#table(test.MSE$tree.pred.fit)
+table(pred,frogs.data$pres.abs)
+```
+
+```{r}
+miss.classification_rate_a=(24+27)/212
+miss.classification_rate_a
+```
+
+The test miss classification error rate using LOOCV is 0.240566.
+
+## Use LOOCV to determine whether pruning is helpful and determine the optimal size for the pruned tree. 
+
+```{r include=FALSE}
+## b)
+set.seed(1)
+frogs.cv <- cv.tree(frogs.tree, FUN = prune.tree, K=10)
+best.pruned<-frogs.cv$size[which.min(frogs.cv$dev)]
+```
+
+```{r,echo=FALSE,fig.align="center",fig.cap="Plot the estimated test error rate",  out.width = "100%"}
+plot(frogs.cv$size, frogs.cv$dev, type = "b")
+```
+
+```{r,echo=FALSE,fig.align="center",fig.cap="Classification prune Tree for frog data",  out.width = "100%"}
+## best pruned tree
+frogs.prune <- prune.tree(frogs.tree, best = 4,method = "deviance")
+
+plot(frogs.prune)
+text(frogs.prune, pretty = 0)
+```
+
+Let $R_j$ be the partitions of the predictor space.
+
+$$
+\begin{aligned}
+R_1 &=\{X \mid distance < 625,northing < 238 \} \\
+R_2 &=\{X \mid distance < 625,northing \ge 238 \} \\
+R_3 &=\{X \mid distance \ge 625,easting < 816.5  \} \\
+R_4 &=\{X \mid distance \ge 625,easting \ge 816.5\} \\
+\end{aligned}
+$$
+
+
+```{r echo=FALSE,warning=FALSE}
+set.seed(1)
+LOOCV1b<-function(data){
+  n<-length(data[,1])
+  tree.pred.fit1b<-c()
+  for (i in 1:n) {
+    newdata<-data[-i,]
+    testdata<-data[i,]
+    fit1b <- prune.tree(frogs.tree, best = 4,method = "deviance",newdata = newdata)
+    tree.pred.fit1b[i] <- predict(fit1b, testdata,"class")
+  }
+  #tree.pred.fit1b<-ifelse(tree.pred.fit1b>=0.5,0,1)
+  MSE<- mean((tree.pred.fit1b!=data$pres.abs))
+  return(list(MSE=MSE,tree.pred.fit1b=tree.pred.fit1b-1))
+}
+test.MSE1b<-LOOCV1b(data=frogs.data)
+#test.MSE1b$tree.pred.fit1b
+table(test.MSE1b$tree.pred.fit1b,frogs.data$pres.abs)
+```
+
+```{r}
+miss.classification_rate_b=(30+14)/212
+miss.classification_rate_b
+```
+
+The pruned tree has four(4) terminal nodes(Figure 2) and the actual used variable in tree construction are "distance", "northing" and "easting"(See Figure 3) and are seems to be most important predictors. 
+
+Using LOOCV method the miss classification error rate for pruned tree with four terminal nodes is 0.2075472. The miss classification error rate is less than the un-pruned tree.
+
+## Use a bagging approach to analyze the data with $B = 1000$. 
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+library(randomForest)
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+set.seed(1)
+frogs.bag <- randomForest(pres.abs ~ ., data = frogs.data,mtry=9, ntree = 1000, importance = TRUE)
+importance(frogs.bag)
+```
+
+```{r,echo=FALSE,fig.align="center",fig.cap="Variable importance measure for each predictor (Bagging)",  out.width = "100%"}
+varImpPlot(frogs.bag)
+```
+
+
+```{r include=FALSE}
+set.seed(1)
+LOOCV1c<-function(data){
+  n<-length(data[,1])
+  tree.pred.fit1c<-c()
+  for (i in 1:n) {
+    newdata<-data[-i,]
+    testdata<-data[i,]
+    fit1c <- randomForest(pres.abs ~ ., data = newdata, mtry=9,ntree = 1000, importance = TRUE)
+    #print( predict(fit1c, testdata))
+    tree.pred.fit1c[i] <- predict(fit1c, testdata,"class")
+  }
+  #tree.pred.fit1c<-ifelse(tree.pred.fit1c>=0.5,0,1)
+  MSE<- mean((tree.pred.fit1c!=data$pres.abs))
+  return(list(MSE=MSE,tree.pred.fit1c=tree.pred.fit1c))
+}
+test.MSE1c<-LOOCV1c(data=frogs.data)
+test.MSE1c$tree.pred.fit1c<-ifelse(test.MSE1c$tree.pred.fit1c==2,1,0)
+table(test.MSE1c$tree.pred.fit1c,frogs.data$pres.abs)
+```
+
+```{r}
+miss.classification_rate_c=(26+22)/212
+miss.classification_rate_c
+```
+Using bagging approach with $B=1000$, the Node purity plot (Figure 4) shows that the variables "distance", "northing" and "easting" are the most important predictors. 
+
+And the miss classification error rate using LOOCV method is 0.2264151.
+
+## Use a random forest approach to analyze the data with $B = 1000$ and $m \approx p/3$.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+set.seed(1)
+frogs.forest <- randomForest(pres.abs ~ ., data = frogs.data,
+	mtry = 9/3, ntree = 1000, importance = TRUE)
+importance(frogs.forest)
+```
+
+
+```{r,echo=FALSE,fig.align="center",fig.cap="Variable importance measure for each predictor (Random forest)",  out.width = "100%"}
+varImpPlot(frogs.forest)
+```
+
+
+```{r echo=FALSE}
+set.seed(1)
+LOOCV1d<-function(data){
+n<-length(data[,1])
+tree.pred.fit1d<-c()
+for (i in 1:n) {
+  newdata<-data[-i,]
+  testdata<-data[i,]
+  fit1d <- randomForest(pres.abs ~ ., data = newdata,
+	mtry = 9/3, ntree = 1000, importance = TRUE)
+  tree.pred.fit1d[i] <- predict(fit1d, testdata, type ="class")
+}
+
+  return(list(tree.pred.fit1d=tree.pred.fit1d-1))
+}
+test.MSE1d<-LOOCV1d(data=frogs.data)
+table(test.MSE1d$tree.pred.fit1d,frogs.data$pres.abs)
+```
+
+
+```{r}
+miss.classification_rate_d=(24+20)/212
+miss.classification_rate_d
+```
+
+Using random forest approach with $B=1000$ the Node purity plot (Figure 5) shows that the variables  "northing","distance", "meanmin" and "easting"  are most important predictors. 
+
+And the miss classification error rate using LOOCV method is 0.2075472.
+
+## Use a boosting approach to analyze the data with $mfinal = 1000$ and $d = 1$.
+
+```{r, include=FALSE, warning=FALSE,message=FALSE}
+library(gbm)
+library(adabag)
+```
+
+```{r, include=FALSE}
+set.seed(1)
+
+frogs.boost <- boosting(pres.abs ~ ., data = frogs.data, boos = TRUE, mfinal = 1000, control = rpart.control(maxdepth = 1))
+
+# Predict using the trained model
+predictions <- predict(frogs.boost, newdata = frogs.data)$class
+table(predictions,frogs.data$pres.abs)
+```
+
+
+```{r echo=FALSE,message=FALSE,warning=FALSE}
+set.seed(1)
+LOOCV1e<-function(data){
+  n<-length(data[,1])
+  tree.pred.fit1e<-c()
+  for (i in 1:n) {
+    newdata<-data[-i,]
+    testdata<-data[i,]
+    fit1e<- boosting(pres.abs ~ ., data = newdata, 
+                           boos = TRUE, mfinal = 1000, control = rpart.control(maxdepth = 1))
+    tree.pred.fit1e[i] <- predict(fit1e, testdata,type = "response")$class
+    #print(tree.pred.fit1e[i])
+  }
+  #tree.pred.fit1e<-ifelse(tree.pred.fit1e>=0.5,1,0)
+  tree.pred.fit1e<-as.numeric(tree.pred.fit1e)
+  #MSE<- mean((tree.pred.fit1e!= data$Outcome))
+  return(list(tree.pred.fit1e=tree.pred.fit1e))
+}
+test.MSE1e<-LOOCV1e(data=frogs.data)
+#test.MSE1e
+table(test.MSE1e$tree.pred.fit1e,frogs.data$pres.abs)
+```
+
+
+```{r}
+ miss.classification_rate_e=(24+20)/212
+ miss.classification_rate_e
+```
+Using boosting approach with $mfinal = 1000$ and $d=1$ the test
+miss classification error rate using LOOCV method is 0.2075472.
+
+
+Finally I compare the results from the various methods. 
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|r|r|r|r|r|r|}
+\hline
+  & un-pruned tree &  pruned tree   & bagging & random-forest  & boosting  \\
+\hline
+Miss classification error rate & 0.240566 &    0.2075472 &   0.2264151 & 0.2075472 &  0.2075472  \\
+\hline
+\end{tabular}
+\caption{Miss classification error rate for different approches}
+\end{table}
+
+When consider the four different approaches discussed above, un-pruned tree approach gives large Miss classification error rate(0.240566) and other approaches gives the small Miss classification error rate(0.2075472). 
